@@ -1,6 +1,8 @@
 // Listening with the model on this computer: microphone -> pieces of speech
 // (speech-segmenter.js) -> model (local-speech-worker.js) -> text.
 
+const RUNS_FROM_LINK = !["localhost", "127.0.0.1"].includes(location.hostname);
+
 function createLocalListener({ onText, onStatus, onFatal }) {
   const MAX_WAITING = 2; // if the model falls behind, skip older speech to stay current
 
@@ -101,7 +103,9 @@ function createLocalListener({ onText, onStatus, onFatal }) {
   async function start() {
     const thisSession = ++session;
     try {
-      onStatus("Loading the speech model. This takes about 30 seconds…");
+      onStatus(RUNS_FROM_LINK
+        ? "Loading the speech model. The first time, this downloads about 2 GB…"
+        : "Loading the speech model. This can take a minute…");
       await load();
       if (thisSession !== session) return;
       onStatus("Starting the microphone…");

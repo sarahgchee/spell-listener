@@ -4,9 +4,13 @@ You only need to run this again if the files in raw_data/ change:
     python build_spells.py
 """
 import json
+import sys
 from pathlib import Path
 
+from spell_scaling import check_against_tables, scaling_for
+
 HERE = Path(__file__).parent
+HIGHER_LEVEL_MARKER = "Using a Higher-Level Spell Slot."
 
 
 def as_list(value):
@@ -28,6 +32,13 @@ def cut(text, start_marker, end_marker):
 def repair_2024(spells):
     """Fixes scanning errors in the 2024 file, using only that file's own text."""
     by_name = {s["name"]: s for s in spells}
+
+    # Some spells keep their higher-level rule in the main text.
+    for spell in spells:
+        if HIGHER_LEVEL_MARKER in spell["description"] and not spell.get("higher_level"):
+            rules, _, higher = spell["description"].partition(HIGHER_LEVEL_MARKER)
+            spell["description"] = rules.rstrip()
+            spell["higher_level"] = higher.strip()
 
     # Part of Control Weather's text and tables landed inside Control Water.
     water = by_name["Control Water"]["description"]
@@ -71,9 +82,22 @@ DATA_WARNINGS = {
 }
 
 
+def repair_2014(spells):
+    """Fixes a scanning error in the 2014 file."""
+    moonbeam = next(s for s in spells if s["name"] == "Moonbeam")
+    moonbeam["higher_level"] = [line.replace("1dl0", "1d10") for line in moonbeam["higher_level"]]
+
+
+def scaling_of(spell, edition):
+    rules = " ".join(as_list(spell.get("desc") or spell.get("description")))
+    higher = " ".join(as_list(spell.get("higher_level")))
+    return scaling_for(edition, spell["name"], spell["level"], rules, higher)
+
+
 def tidy(spell, edition):
     return {
         "warning": DATA_WARNINGS.get(edition, {}).get(spell["name"], ""),
+        "scaling": scaling_of(spell, edition),
         "name": spell["name"],
         "level": spell["level"],
         "school": spell["school"]["name"],
@@ -96,8 +120,18 @@ def main():
         raw = json.loads((HERE / "raw_data" / f"spells-{edition}.json").read_text("utf-8"))
         if edition == "2024":
             repair_2024(raw)
+        else:
+            repair_2014(raw)
         data[edition] = sorted((tidy(s, edition) for s in raw), key=lambda s: s["name"])
-        print(f"{edition}: {len(data[edition])} spells")
+        with_dice = sum(1 for s in data[edition] if s["scaling"])
+        print(f"{edition}: {len(data[edition])} spells, {with_dice} with level-based dice")
+        for spell in raw:
+            for problem in check_against_tables(spell["name"], spell, scaling_of(spell, edition)):
+                print(f"  CHECK {problem}")
+        if "--audit" in sys.argv:
+            for spell in data[edition]:
+                if spell["scaling"]:
+                    print(f"  {spell['level']} {spell['name']}: {json.dumps(spell['scaling'], ensure_ascii=False)}")
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     (HERE / "spells-data.js").write_text(f"window.SPELL_DATA = {text};\n", "utf-8")
 

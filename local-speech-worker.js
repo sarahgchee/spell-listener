@@ -1,13 +1,17 @@
 // Runs Cohere Transcribe (Q4 version) in the background, so the page stays
-// responsive. Everything loads from this computer; nothing goes online.
+// responsive. Your speech never leaves the computer. On your own computer the
+// model loads from the models/ folder. From an online link, the browser downloads
+// the model once from Hugging Face and keeps a copy.
 import { pipeline, env } from "./vendor/transformers.min.js";
 
 const MODEL = "onnx-community/cohere-transcribe-03-2026-ONNX";
+const MODEL_VERSION = "31b1c6211c9000d76b077ddd23b74c9090badeba";
+const IS_LOCAL = ["localhost", "127.0.0.1"].includes(self.location.hostname);
 
-env.allowRemoteModels = false;
-env.allowLocalModels = true;
+env.allowRemoteModels = !IS_LOCAL;
+env.allowLocalModels = IS_LOCAL;
 env.localModelPath = "/models/";
-env.useBrowserCache = false; // the files are already on disk; don't store a second copy
+env.useBrowserCache = !IS_LOCAL; // saves re-downloading 2 GB on every visit
 env.useWasmCache = false;
 env.backends.onnx.wasm.wasmPaths = {
   mjs: new URL("./vendor/ort-wasm-simd-threaded.asyncify.mjs", import.meta.url).href,
@@ -21,6 +25,7 @@ async function load(device) {
   transcriber = await pipeline("automatic-speech-recognition", MODEL, {
     dtype: "q4",
     device,
+    revision: MODEL_VERSION,
     progress_callback: (progress) => {
       if (progress.status === "progress") {
         postMessage({ type: "progress", file: progress.file, percent: progress.progress });

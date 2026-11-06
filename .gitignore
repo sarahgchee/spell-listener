@@ -1,3 +1,6 @@
 # The speech model is about 2 GB, too big for Git. See "Getting the model" in README.md.
 models/
 __pycache__/
+
+# Your own spells may be text from paid books, so they stay on your computer.
+my-spells.js

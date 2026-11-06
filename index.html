@@ -16,6 +16,7 @@
     --accent-ink: #231505;
     --live: #e5605c;
     --tag: #3a3249;
+    --rule-accent: #6fc3bd;
   }
   * { box-sizing: border-box; }
   body {
@@ -62,6 +63,9 @@
   .edition button { padding: 9px 13px; border: 0; background: transparent; color: var(--muted); }
   .edition button[aria-pressed="true"] { background: var(--tag); color: var(--text); font-weight: 600; }
 
+  .modifier { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 15px; }
+  #modifier { width: 64px; padding: 9px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); text-align: center; }
+
   #lookup-form { flex: 1 1 240px; }
   #lookup {
     width: 100%;
@@ -75,7 +79,7 @@
   .status-row { display: flex; gap: 8px; align-items: baseline; margin-top: 8px; font-size: 15px; min-height: 23px; }
   #status { color: var(--muted); white-space: nowrap; }
   #status.problem { color: #ff9b97; white-space: normal; }
-  #heard { color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; flex: 1; }
+  #heard { color: var(--muted); font-style: italic; flex: 1; }
 
   main { padding: 20px; }
   #cards {
@@ -91,6 +95,8 @@
     border-radius: 10px;
     padding: 16px 18px;
   }
+  .card.rule { border-top-color: var(--rule-accent); }
+  .card.rule .subtitle { color: var(--rule-accent); }
   .card:first-child { animation: arrive .25s ease-out; }
   @keyframes arrive { from { opacity: 0; transform: translateY(-8px); } }
   @media (prefers-reduced-motion: reduce) { .card:first-child { animation: none; } }
@@ -107,6 +113,22 @@
   .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
   .tag { padding: 2px 10px; border-radius: 99px; background: var(--tag); font-size: 14px; font-weight: 600; }
   .tag.warn { background: var(--accent); color: var(--accent-ink); }
+
+  .cast { margin: 0 0 12px; padding: 12px 14px; border: 2px solid var(--accent); border-radius: 8px; background: var(--panel-raised); }
+  .cast.problem { border-color: var(--live); }
+  .cast h3 { margin: 0 0 8px; font-size: 14px; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+  .cast.problem h3 { color: #ff9b97; }
+  .cast p { margin: 0; }
+  .cast-line + .cast-line { margin-top: 10px; }
+  .cast-label { font-size: 14px; color: var(--muted); }
+  .cast-dice { font: 700 34px/1.15 Georgia, "Times New Roman", serif; }
+  .cast-detail { font-size: 15px; color: var(--muted); }
+  .cast-note { margin-top: 8px !important; font-size: 15px; color: var(--muted); }
+
+  .level-table { width: 100%; margin: 0 0 12px; border-collapse: collapse; font-size: 15px; }
+  .level-table th, .level-table td { padding: 3px 8px; border: 1px solid var(--line); text-align: left; }
+  .level-table th { font-weight: 600; color: var(--muted); }
+  .level-table tr.active td { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
 
   .rules p { margin: 0 0 10px; }
   .rules h3 { margin: 14px 0 6px; font-size: 17px; }
@@ -138,9 +160,12 @@
       <button type="button" data-edition="2014">2014 rules</button>
       <button type="button" data-edition="2024">2024 rules</button>
     </div>
+    <label class="modifier">Spellcasting modifier
+      <input id="modifier" type="number" min="-5" max="10" step="1" placeholder="?">
+    </label>
     <form id="lookup-form">
       <input id="lookup" list="spell-names" autocomplete="off" aria-label="Look up a spell by typing"
-             placeholder="Or type a spell name">
+             placeholder="Or type a spell or rule">
       <datalist id="spell-names"></datalist>
     </form>
     <button id="clear" type="button">Clear cards</button>
@@ -155,7 +180,9 @@
   <div id="empty">
     <h2>Say a spell, see its rules</h2>
     <p>Press <strong>Start listening</strong>, then say something like “I cast Fireball.”
+       Add a level to see what to roll: “I cast Burning Hands at level 2.”
        Spells that are also everyday words, like Light or Shield, need a casting word: “I cast Shield.”</p>
+    <p>Combat rules work too: say “I jump” or “I dash.” Common words need “action”: “I take the Help action.”</p>
   </div>
   <div id="cards"></div>
 </main>
@@ -170,7 +197,10 @@
 </footer>
 
 <script src="spells-data.js"></script>
+<script src="rules-data.js"></script>
+<script src="my-spells.js"></script>
 <script src="matcher.js"></script>
+<script src="spell-levels.js"></script>
 <script src="speech-segmenter.js"></script>
 <script src="local-speech.js"></script>
 <script>
@@ -183,10 +213,15 @@
   const heardEl = document.getElementById("heard");
   const listenButton = document.getElementById("listen");
   const lookupInput = document.getElementById("lookup");
+  const modifierInput = document.getElementById("modifier");
 
   let edition = "2014";
   let matcher = null;
-  let shownNames = []; // newest first
+  let ruleMatcher = null;
+  const RULE_PREFIX = "rule:"; // the Jump rule and the Jump spell are separate cards
+  let shownNames = []; // newest first: spell names, plus rules as "rule:Name"
+  const castLevels = new Map(); // spell name -> the level it was cast at
+  let spellcastingModifier = null; // null until you say or type it
   const lastHeardAt = new Map();
 
   /* ---------- Rules edition ---------- */
@@ -195,17 +230,27 @@
     edition = next;
     try { localStorage.setItem("edition", next); } catch (e) {}
     matcher = createMatcher(SPELL_DATA[edition]);
+    ruleMatcher = createRuleMatcher(RULE_DATA[edition]);
     document.querySelectorAll("[data-edition]").forEach((button) => {
       button.setAttribute("aria-pressed", String(button.dataset.edition === edition));
     });
+    const lookupNames = [...new Set([...SPELL_DATA[edition], ...RULE_DATA[edition]].map((item) => item.name))].sort();
     document.getElementById("spell-names").innerHTML =
-      SPELL_DATA[edition].map((spell) => `<option value="${escapeHtml(spell.name)}">`).join("");
-    shownNames = shownNames.filter((name) => findSpell(name));
+      lookupNames.map((name) => `<option value="${escapeHtml(name)}">`).join("");
+    shownNames = shownNames.filter((id) => (isRuleId(id) ? findRule(id) : findSpell(id)));
     renderCards();
   }
 
   function findSpell(name) {
     return SPELL_DATA[edition].find((spell) => spell.name === name);
+  }
+
+  function isRuleId(id) {
+    return id.startsWith(RULE_PREFIX);
+  }
+
+  function findRule(id) {
+    return RULE_DATA[edition].find((rule) => RULE_PREFIX + rule.name === id);
   }
 
   /* ---------- Spell cards ---------- */
@@ -267,7 +312,41 @@
     return `${spell.level}${suffix}-level ${spell.school.toLowerCase()}`;
   }
 
+  function castHtml(spell, level) {
+    if (!level) return "";
+    const info = SpellLevels.castInfo(spell, level, spellcastingModifier);
+    if (info.kind === "problem") {
+      return `<section class="cast problem"><h3>Can't cast at level ${level}</h3><p>${escapeHtml(info.message)}</p></section>`;
+    }
+    const body = info.kind === "dice"
+      ? info.lines.map((line) => `
+          <div class="cast-line">
+            <div class="cast-label">${escapeHtml(line.label)}</div>
+            <div class="cast-dice">${escapeHtml(line.dice)}</div>
+            <div class="cast-detail">${escapeHtml(line.detail)}</div>
+          </div>`).join("")
+      : `<p>${escapeHtml(info.message)}</p>`;
+    const note = info.note ? `<p class="cast-note">${escapeHtml(info.note)}</p>` : "";
+    return `<section class="cast"><h3>${escapeHtml(info.title)}</h3>${body}${note}</section>`;
+  }
+
+  function levelTableHtml(spell, level) {
+    const table = SpellLevels.levelTable(spell, spellcastingModifier);
+    if (!table) return "";
+    const active = SpellLevels.activeRow(table, level || 0);
+    const isValid = level && SpellLevels.castInfo(spell, level).kind === "dice";
+    const head = [table.heading, ...table.columns].map((c) => `<th scope="col">${escapeHtml(c)}</th>`).join("");
+    const rows = table.rows.map((row) => `
+      <tr class="${isValid && row.level === active ? "active" : ""}">
+        <td>${escapeHtml(row.name)}</td>${row.cells.map((c) => `<td>${escapeHtml(c)}</td>`).join("")}
+      </tr>`).join("");
+    return `<table class="level-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
   function cardHtml(spell) {
+    // Once the modifier is known, show the total even if no level was said.
+    const usesKnownModifier = SpellLevels.usesModifier(spell) && spellcastingModifier !== null;
+    const castLevel = castLevels.get(spell.name) || (usesKnownModifier ? spell.level : null);
     const tags = [];
     if (spell.concentration) tags.push('<span class="tag warn">Concentration</span>');
     if (spell.ritual) tags.push('<span class="tag">Ritual</span>');
@@ -285,6 +364,8 @@
           <button class="dismiss" type="button" data-dismiss="${escapeHtml(spell.name)}"
                   aria-label="Remove ${escapeHtml(spell.name)}">×</button>
         </div>
+        ${castHtml(spell, castLevel)}
+        ${levelTableHtml(spell, castLevel)}
         ${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}
         <dl class="facts">
           <div><dt>Casting time</dt><dd>${escapeHtml(spell.castingTime)}</dd></div>
@@ -295,29 +376,77 @@
         <div class="rules">${rulesToHtml(spell.desc)}</div>
         ${spell.warning ? `<p class="data-warning">${escapeHtml(spell.warning)}</p>` : ""}
         ${higher}
-        <p class="classes">${escapeHtml(spell.classes.join(", "))}</p>
+        <p class="classes">${escapeHtml(spell.classes.join(", "))}${spell.source ? ` · ${escapeHtml(spell.source)}` : ""}</p>
+      </article>`;
+  }
+
+  function ruleCardHtml(rule) {
+    return `
+      <article class="card rule">
+        <div class="card-top">
+          <div>
+            <h2>${escapeHtml(rule.name)}</h2>
+            <p class="subtitle">${escapeHtml(rule.kind)} · ${edition} rules</p>
+          </div>
+          <button class="dismiss" type="button" data-dismiss="${escapeHtml(RULE_PREFIX + rule.name)}"
+                  aria-label="Remove ${escapeHtml(rule.name)}">×</button>
+        </div>
+        <div class="rules">${rulesToHtml(rule.desc)}</div>
       </article>`;
   }
 
   function renderCards() {
-    cardsEl.innerHTML = shownNames.map((name) => cardHtml(findSpell(name))).join("");
+    cardsEl.innerHTML = shownNames
+      .map((id) => (isRuleId(id) ? ruleCardHtml(findRule(id)) : cardHtml(findSpell(id))))
+      .join("");
     emptyEl.hidden = shownNames.length > 0;
   }
 
-  function showSpell(spell) {
-    shownNames = [spell.name, ...shownNames.filter((name) => name !== spell.name)].slice(0, MAX_CARDS);
+  function showCard(id) {
+    shownNames = [id, ...shownNames.filter((shown) => shown !== id)].slice(0, MAX_CARDS);
     renderCards();
+  }
+
+  function showSpell(spell) {
+    showCard(spell.name);
   }
 
   /* ---------- What was said ---------- */
 
+  function setModifier(value) {
+    if (value === spellcastingModifier) return;
+    spellcastingModifier = value;
+    try { localStorage.setItem("modifier", value === null ? "" : String(value)); } catch (e) {}
+    modifierInput.value = value === null ? "" : value;
+    renderCards();
+  }
+
   function handleHeard(text) {
+    const saidModifier = findSpellcastingModifier(text);
+    if (saidModifier !== null) setModifier(saidModifier);
     const now = Date.now();
-    for (const spell of matcher.find(text)) {
-      if (now - (lastHeardAt.get(spell.name) || 0) < SAME_SPELL_COOLDOWN_MS) continue;
+    const spellMentions = matcher.mentions(text);
+    // "I cast jump" means the spell, so it doesn't bring up the Jump rule too.
+    const saidSpells = new Set(spellMentions.map((mention) => mention.spell.name));
+    for (const rule of ruleMatcher.find(text)) {
+      const id = RULE_PREFIX + rule.name;
+      if (saidSpells.has(rule.name) || now - (lastHeardAt.get(id) || 0) < SAME_SPELL_COOLDOWN_MS) continue;
+      lastHeardAt.set(id, now);
+      showCard(id);
+    }
+    for (const { spell, level } of spellMentions) {
+      const isRepeat = now - (lastHeardAt.get(spell.name) || 0) < SAME_SPELL_COOLDOWN_MS;
+      // A repeat is ignored, unless it adds a level: "I cast sleep... at level 2".
+      if (isRepeat && (!level || castLevels.get(spell.name) === level)) continue;
       lastHeardAt.set(spell.name, now);
+      setCastLevel(spell, level);
       showSpell(spell);
     }
+  }
+
+  function setCastLevel(spell, level) {
+    if (level) castLevels.set(spell.name, level);
+    else castLevels.delete(spell.name);
   }
 
   /* ---------- Listening through the microphone ---------- */
@@ -346,7 +475,10 @@
     });
     const chromeUnavailable = engine === "chrome" && !SpeechRecognition;
     listenButton.disabled = chromeUnavailable;
-    setStatus(chromeUnavailable ? "This browser can't listen this way. Open this page in Google Chrome." : "Not listening", chromeUnavailable);
+    if (chromeUnavailable) setStatus("This browser can't listen this way. Open this page in Google Chrome.", true);
+    else if (engine === "local" && RUNS_FROM_LINK) setStatus("Not listening. Keeps audio private, but the first use downloads about 2 GB.");
+    else if (engine === "chrome") setStatus("Not listening. Chrome sends audio to Google to understand it.");
+    else setStatus("Not listening");
   }
 
   function setStatus(text, isProblem = false) {
@@ -428,6 +560,13 @@
     button.addEventListener("click", () => setEngine(button.dataset.engine));
   });
 
+  modifierInput.addEventListener("change", () => {
+    const value = modifierInput.value === "" ? null : Math.trunc(Number(modifierInput.value));
+    const isValid = value === null || (value >= -5 && value <= 10);
+    if (isValid) setModifier(value);
+    else modifierInput.value = spellcastingModifier === null ? "" : spellcastingModifier;
+  });
+
   document.getElementById("clear").addEventListener("click", () => {
     shownNames = [];
     renderCards();
@@ -444,13 +583,20 @@
     event.preventDefault();
     const text = lookupInput.value.trim();
     if (!text) return;
-    const found = matcher.find(text, { typed: true });
-    [...found].reverse().forEach(showSpell);
-    if (found.length) {
+    const typedModifier = findSpellcastingModifier(text);
+    if (typedModifier !== null) setModifier(typedModifier);
+    const found = matcher.mentions(text, { typed: true });
+    [...found].reverse().forEach(({ spell, level }) => {
+      setCastLevel(spell, level);
+      showSpell(spell);
+    });
+    const foundRules = ruleMatcher.find(text, { typed: true });
+    [...foundRules].reverse().forEach((rule) => showCard(RULE_PREFIX + rule.name));
+    if (found.length || foundRules.length || typedModifier !== null) {
       lookupInput.value = "";
       if (!listening) setStatus("Not listening");
     } else {
-      setStatus(`No spell found for “${text}” in the free ${edition} rules.`, true);
+      setStatus(`Nothing found for “${text}” in the free ${edition} rules.`, true);
     }
   });
 
@@ -460,13 +606,29 @@
 
   /* ---------- Start up ---------- */
 
+  // Your own spells from my-spells.js. The page works fine without that file.
+  (window.MY_SPELLS || []).forEach((spell) => {
+    Object.values(SPELL_DATA).forEach((spells) => {
+      if (!spells.some((existing) => existing.name === spell.name)) spells.push(spell);
+    });
+  });
+
+  try {
+    const savedModifier = localStorage.getItem("modifier");
+    if (savedModifier) {
+      spellcastingModifier = Number(savedModifier);
+      modifierInput.value = spellcastingModifier;
+    }
+  } catch (e) {}
+
   let savedEdition = null;
   try { savedEdition = localStorage.getItem("edition"); } catch (e) {}
   setEdition(savedEdition === "2024" ? "2024" : "2014");
 
   let savedEngine = null;
   try { savedEngine = localStorage.getItem("engine"); } catch (e) {}
-  setEngine(savedEngine === "chrome" ? "chrome" : "local");
+  const defaultEngine = RUNS_FROM_LINK ? "chrome" : "local"; // no surprise 2 GB download from a link
+  setEngine(savedEngine === "chrome" || savedEngine === "local" ? savedEngine : defaultEngine);
 
   if (location.protocol === "file:") {
     setStatus("Please open this with start.bat. The local speech model can't load otherwise.", true);
