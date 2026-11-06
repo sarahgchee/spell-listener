@@ -36,9 +36,9 @@ It only listens for your *spellcasting* modifier, so "my strength modifier is 2"
 
 Say a rule during combat and its card appears, with a teal top edge so you can tell it apart from a spell. The cards follow your 2014 or 2024 switch.
 
-- **Said any time:** jump, dash, disengage, dodge, grapple, shove, opportunity attack, difficult terrain, two-weapon fighting (2014), and conditions like prone, stunned and poisoned.
+- **Said any time:** jump, dash, disengage, dodge, grapple, shove, opportunity attack, difficult terrain, darkness, two-weapon fighting (2014), and conditions like prone, stunned and poisoned.
 - **Need the word "action":** attack, help, hide, ready, search, plus influence, magic, study and utilize (2024). For example "I take the Help action" or "I use my action to hide". This stops "are you ready?" from bringing up a card.
-- **Jump the rule or Jump the spell:** "I jump" shows the rule. "I cast Jump" shows the spell.
+- **Rule or spell with the same name:** "I jump" shows the rule and "I cast Jump" shows the spell. Darkness works the same way.
 
 To change which words trigger a card, edit `RULE_WORDS` and `RULE_WORDS_NEEDING_ACTION` in `matcher.js`. The box at the top of the page can also find any rule by name.
 

@@ -158,6 +158,9 @@ const heardRules = [
   ["2014", "does that provoke an opportunity attack", ["Opportunity Attack"]],
   ["2014", "he gets an attack of opportunity", ["Opportunity Attack"]],
   ["2014", "that's difficult terrain", ["Difficult Terrain"]],
+  ["2014", "we're fighting in darkness", ["Darkness"]],
+  ["2024", "what does darkness do", ["Darkness"]],
+  ["2014", "it's a bit dark in here", []],
   ["2014", "I take the help action", ["Help"]],
   ["2014", "I use my action to hide", ["Hide"]],
   ["2024", "I take the search action", ["Search"]],
@@ -204,6 +207,22 @@ for (const [text, wantsSpell] of [["I cast jump on the fighter", true], ["the ju
   if (hasSpell !== wantsSpell) {
     failures++;
     console.log(`FAIL [jump spell] "${text}" -> spell found: ${hasSpell}`);
+  }
+}
+
+// The Darkness rule and the Darkness spell are told apart the same way.
+for (const [text, wantsSpell] of [["I cast darkness", true], ["the darkness spell", true], ["we're fighting in darkness", false]]) {
+  const hasSpell = spells2014.find(text).some((s) => s.name === "Darkness");
+  if (hasSpell !== wantsSpell) {
+    failures++;
+    console.log(`FAIL [darkness spell] "${text}" -> spell found: ${hasSpell}`);
+  }
+}
+for (const edition of ["2014", "2024"]) {
+  const card = ruleData[edition].find((r) => r.name === "Darkness").desc.join(" ");
+  if (!/blinded/i.test(card) || !/heavily obscured/i.test(card)) {
+    failures++;
+    console.log(`FAIL [darkness card ${edition}] is missing its effect`);
   }
 }
 

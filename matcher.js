@@ -144,6 +144,7 @@
     Shove: ["shove", "shoves", "shoved", "shoving"],
     "Opportunity Attack": ["opportunity attack", "opportunity attacks", "attack of opportunity", "attacks of opportunity"],
     "Difficult Terrain": ["difficult terrain"],
+    Darkness: ["darkness"],
     "Two-Weapon Fighting": ["two weapon fighting", "dual wield", "dual wielding"],
     "Use an Object": ["use an object"],
   };

@@ -78,17 +78,40 @@ def conditions(name):
     return result
 
 
+def blinded_effects(condition_list):
+    blinded = next(c for c in condition_list if c["name"] == "Blinded")
+    return ["# While Blinded"] + [line for line in blinded["desc"] if not line.startswith("While you have")]
+
+
+def darkness_2014(condition_list, environment):
+    wanted = ("**Darkness** creates", "A **heavily obscured** area", "Characters face darkness")
+    vision = lines_of(section(environment, "### Vision and Light"))
+    desc = [next(line for line in vision if line.startswith(start)) for start in wanted]
+    return {"name": "Darkness", "kind": "Vision", "desc": desc + blinded_effects(condition_list)}
+
+
+def darkness_2024(condition_list):
+    desc = [
+        "An area of Darkness is Heavily Obscured.",
+        "You have the Blinded condition while trying to see something in a Heavily Obscured space.",
+        "***Darkvision.*** If you have Darkvision, you can see in Dim Light within a specified range as if it were Bright Light and in Darkness within that range as if it were Dim Light. You discern colors in that Darkness only as shades of gray.",
+    ]
+    return {"name": "Darkness", "kind": "Vision", "desc": desc + blinded_effects(condition_list)}
+
+
 def build_2014():
     chapters = {s["name"]: s["desc"] for s in read_json("rule-sections-2014.json")}
     rules = [
         {"name": name, "kind": kind, "desc": lines_of(section(chapters[chapter], heading))}
         for name, kind, chapter, heading in RULES_2014
     ]
-    return rules + conditions("conditions-2014.json")
+    condition_list = conditions("conditions-2014.json")
+    return rules + [darkness_2014(condition_list, chapters["The Environment"])] + condition_list
 
 
 def build_2024():
-    return read_json("rules-2024.json") + conditions("conditions-2024.json")
+    condition_list = conditions("conditions-2024.json")
+    return read_json("rules-2024.json") + [darkness_2024(condition_list)] + condition_list
 
 
 def main():
