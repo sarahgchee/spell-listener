@@ -104,7 +104,7 @@ function createLocalListener({ onText, onStatus, onFatal }) {
     const thisSession = ++session;
     try {
       onStatus(RUNS_FROM_LINK
-        ? "Loading the speech model. The first time, this downloads about 2 GB…"
+        ? "Downloading the speech model (about 2 GB). This can take several minutes…"
         : "Loading the speech model. This can take a minute…");
       await load();
       if (thisSession !== session) return;

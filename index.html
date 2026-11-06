@@ -476,7 +476,7 @@
     const chromeUnavailable = engine === "chrome" && !SpeechRecognition;
     listenButton.disabled = chromeUnavailable;
     if (chromeUnavailable) setStatus("This browser can't listen this way. Open this page in Google Chrome.", true);
-    else if (engine === "local" && RUNS_FROM_LINK) setStatus("Not listening. Keeps audio private, but the first use downloads about 2 GB.");
+    else if (engine === "local" && RUNS_FROM_LINK) setStatus("Not listening. Keeps audio private, but downloads about 2 GB, possibly on every visit.");
     else if (engine === "chrome") setStatus("Not listening. Chrome sends audio to Google to understand it.");
     else setStatus("Not listening");
   }

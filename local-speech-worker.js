@@ -1,7 +1,8 @@
 // Runs Cohere Transcribe (Q4 version) in the background, so the page stays
 // responsive. Your speech never leaves the computer. On your own computer the
 // model loads from the models/ folder. From an online link, the browser downloads
-// the model once from Hugging Face and keeps a copy.
+// the model from Hugging Face. It tries to keep a copy, but browsers can refuse to
+// store the 1.9 GB encoder file, and then it downloads again on the next visit.
 import { pipeline, env } from "./vendor/transformers.min.js";
 
 const MODEL = "onnx-community/cohere-transcribe-03-2026-ONNX";
@@ -11,7 +12,7 @@ const IS_LOCAL = ["localhost", "127.0.0.1"].includes(self.location.hostname);
 env.allowRemoteModels = !IS_LOCAL;
 env.allowLocalModels = IS_LOCAL;
 env.localModelPath = "/models/";
-env.useBrowserCache = !IS_LOCAL; // saves re-downloading 2 GB on every visit
+env.useBrowserCache = !IS_LOCAL; // saves re-downloading when the browser allows it
 env.useWasmCache = false;
 env.backends.onnx.wasm.wasmPaths = {
   mjs: new URL("./vendor/ort-wasm-simd-threaded.asyncify.mjs", import.meta.url).href,

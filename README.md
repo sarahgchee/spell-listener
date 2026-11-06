@@ -74,7 +74,7 @@ If the local model has a problem, the page tells you instead of switching to Chr
 
 ## Using the online link
 
-From an online link, the page starts in **Chrome (online)** mode, which works right away but sends audio to Google. Choosing **On this computer** downloads the speech model (about 2 GB) from Hugging Face the first time, and the browser keeps a copy for later visits. Your own `my-spells.js` spells aren't included online.
+From an online link, the page starts in **Chrome (online)** mode, which works right away but sends audio to Google. Choosing **On this computer** downloads the speech model (about 2 GB, roughly 4 minutes in testing) from Hugging Face. The browser may refuse to store the largest file, so this download can repeat on every visit. Your own `my-spells.js` spells aren't included online.
 
 ## Credits and licenses
 
