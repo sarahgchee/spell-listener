@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Speed Test</title>
+<style>
+  body { margin: 0; padding: 20px; background: #15131a; color: #f1edf7; font: 16px/1.5 "Segoe UI", system-ui, sans-serif; }
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+  th, td { padding: 6px 10px; border: 1px solid #3b3647; text-align: left; vertical-align: top; }
+  #status { color: #f0a85a; }
+</style>
+</head>
+<body>
+<h1>Local speech speed test</h1>
+<p>Add <code>?device=wasm</code> to the address to test the processor instead of the graphics chip.</p>
+<p id="status">Starting…</p>
+<table><thead><tr><th>Clip</th><th>Length</th><th>Time to transcribe</th><th>Heard</th></tr></thead><tbody id="rows"></tbody></table>
+<script>
+  const CLIPS = ["fireball", "missile-step", "eldritch", "cleric", "shillelagh", "prestidigitation", "long"];
+  const device = new URLSearchParams(location.search).get("device") || "webgpu";
+  const statusEl = document.getElementById("status");
+  const results = { device, clips: [], done: false };
+  window.speedTest = results;
+
+  const worker = new Worker("local-speech-worker.js", { type: "module" });
+  const pending = new Map();
+  worker.onmessage = ({ data }) => {
+    if (data.type === "progress") statusEl.textContent = `Loading ${data.file}: ${Math.round(data.percent)}%`;
+    if (data.type === "ready") run(data.ms);
+    if (data.type === "result") { pending.get(data.id)(data); pending.delete(data.id); }
+    if (data.type === "error") { results.error = data.message; results.done = true; statusEl.textContent = `Error: ${data.message}`; }
+  };
+
+  function transcribe(id, audio) {
+    return new Promise((resolve) => {
+      pending.set(id, resolve);
+      worker.postMessage({ type: "transcribe", id, audio }, [audio.buffer]);
+    });
+  }
+
+  async function run(loadMs) {
+    results.loadSeconds = loadMs / 1000;
+    const context = new AudioContext({ sampleRate: 16000 });
+    for (const clip of CLIPS) {
+      statusEl.textContent = `Transcribing ${clip}…`;
+      const bytes = await (await fetch(`test-audio/${clip}.wav`)).arrayBuffer();
+      const audio = (await context.decodeAudioData(bytes)).getChannelData(0).slice();
+      const seconds = audio.length / 16000;
+      const { text, ms } = await transcribe(clip, audio);
+      results.clips.push({ clip, seconds, transcribeSeconds: ms / 1000, text });
+      document.getElementById("rows").insertAdjacentHTML("beforeend",
+        `<tr><td>${clip}</td><td>${seconds.toFixed(1)} s</td><td>${(ms / 1000).toFixed(2)} s</td><td></td></tr>`);
+      document.getElementById("rows").lastElementChild.lastElementChild.textContent = text;
+    }
+    results.done = true;
+    statusEl.textContent = `Done on ${device}. Model load: ${results.loadSeconds.toFixed(1)} s`;
+  }
+
+  statusEl.textContent = `Loading the model on ${device}…`;
+  worker.postMessage({ type: "load", device });
+</script>
+</body>
+</html>

@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spell Listener</title>
+<style>
+  :root {
+    --bg: #15131a;
+    --panel: #201d28;
+    --panel-raised: #2a2634;
+    --line: #3b3647;
+    --text: #f1edf7;
+    --muted: #b0a9bf;
+    --accent: #f0a85a;
+    --accent-ink: #231505;
+    --live: #e5605c;
+    --tag: #3a3249;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.5 "Segoe UI", system-ui, sans-serif;
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    padding: 12px 20px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+  h1 {
+    margin: 0 8px 0 0;
+    font: 700 22px Georgia, "Times New Roman", serif;
+  }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  #listen {
+    min-width: 170px;
+    padding: 9px 18px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font-weight: 700;
+  }
+  #listen.on { background: var(--live); color: #fff; }
+  #listen:disabled { opacity: .5; cursor: not-allowed; }
+
+  .edition { display: flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .edition button { padding: 9px 13px; border: 0; background: transparent; color: var(--muted); }
+  .edition button[aria-pressed="true"] { background: var(--tag); color: var(--text); font-weight: 600; }
+
+  #lookup-form { flex: 1 1 240px; }
+  #lookup {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--bg);
+  }
+  #clear { padding: 9px 13px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); }
+
+  .status-row { display: flex; gap: 8px; align-items: baseline; margin-top: 8px; font-size: 15px; min-height: 23px; }
+  #status { color: var(--muted); white-space: nowrap; }
+  #status.problem { color: #ff9b97; white-space: normal; }
+  #heard { color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; flex: 1; }
+
+  main { padding: 20px; }
+  #cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-top: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card:first-child { animation: arrive .25s ease-out; }
+  @keyframes arrive { from { opacity: 0; transform: translateY(-8px); } }
+  @media (prefers-reduced-motion: reduce) { .card:first-child { animation: none; } }
+
+  .card-top { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+  .card h2 { margin: 0; font: 700 26px/1.2 Georgia, "Times New Roman", serif; }
+  .subtitle { color: var(--muted); margin: 2px 0 12px; }
+  .dismiss { flex: none; width: 32px; height: 32px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; }
+  .dismiss:hover { background: var(--panel-raised); color: var(--text); }
+
+  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; margin: 0 0 12px; padding: 12px; background: var(--panel-raised); border-radius: 8px; }
+  .facts dt { font-size: 13px; color: var(--muted); }
+  .facts dd { margin: 0; font-weight: 600; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .tag { padding: 2px 10px; border-radius: 99px; background: var(--tag); font-size: 14px; font-weight: 600; }
+  .tag.warn { background: var(--accent); color: var(--accent-ink); }
+
+  .rules p { margin: 0 0 10px; }
+  .rules h3 { margin: 14px 0 6px; font-size: 17px; }
+  .rules ul { margin: 0 0 10px; padding-left: 20px; }
+  .rules table { width: 100%; margin: 0 0 12px; border-collapse: collapse; font-size: 15px; }
+  .rules th, .rules td { padding: 4px 8px; border: 1px solid var(--line); text-align: left; }
+  .higher { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .higher strong { color: var(--accent); }
+  .data-warning { margin: 10px 0 0; padding: 8px 12px; border-left: 4px solid var(--accent); background: var(--panel-raised); font-size: 15px; }
+  .classes { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
+
+  #empty { max-width: 620px; margin: 8vh auto; text-align: center; color: var(--muted); }
+  #empty h2 { margin: 0 0 8px; color: var(--text); font: 700 26px Georgia, "Times New Roman", serif; }
+  footer { padding: 12px 20px 24px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+  footer a { color: inherit; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<header>
+  <div class="controls">
+    <h1>Spell Listener</h1>
+    <button id="listen" type="button">Start listening</button>
+    <div class="edition" role="group" aria-label="Speech recognition">
+      <button type="button" data-engine="local" title="Runs on this computer. Audio stays here and it works offline.">On this computer</button>
+      <button type="button" data-engine="chrome" title="Faster to start, but sends audio to Google and needs internet.">Chrome (online)</button>
+    </div>
+    <div class="edition" role="group" aria-label="Rules edition">
+      <button type="button" data-edition="2014">2014 rules</button>
+      <button type="button" data-edition="2024">2024 rules</button>
+    </div>
+    <form id="lookup-form">
+      <input id="lookup" list="spell-names" autocomplete="off" aria-label="Look up a spell by typing"
+             placeholder="Or type a spell name">
+      <datalist id="spell-names"></datalist>
+    </form>
+    <button id="clear" type="button">Clear cards</button>
+  </div>
+  <div class="status-row" aria-live="polite">
+    <span id="status">Not listening</span>
+    <span id="heard"></span>
+  </div>
+</header>
+
+<main>
+  <div id="empty">
+    <h2>Say a spell, see its rules</h2>
+    <p>Press <strong>Start listening</strong>, then say something like “I cast Fireball.”
+       Spells that are also everyday words, like Light or Shield, need a casting word: “I cast Shield.”</p>
+  </div>
+  <div id="cards"></div>
+</main>
+
+<footer>
+  Includes material from the System Reference Document 5.1 and 5.2 by Wizards of the Coast LLC, available at
+  <a href="https://dnd.wizards.com/resources/systems-reference-document">dnd.wizards.com/resources/systems-reference-document</a>,
+  licensed under the <a href="https://creativecommons.org/licenses/by/4.0/legalcode">Creative Commons Attribution 4.0 International License</a>.
+  Spell data formatted by the <a href="https://github.com/5e-bits/5e-database">5e-database</a> project.
+  Local speech recognition uses <a href="https://huggingface.co/CohereLabs/cohere-transcribe-03-2026">Cohere Transcribe</a> (Apache 2.0),
+  through the <a href="https://huggingface.co/onnx-community/cohere-transcribe-03-2026-ONNX">onnx-community conversion</a> and Transformers.js.
+</footer>
+
+<script src="spells-data.js"></script>
+<script src="matcher.js"></script>
+<script src="speech-segmenter.js"></script>
+<script src="local-speech.js"></script>
+<script>
+  const SAME_SPELL_COOLDOWN_MS = 20000; // ignore repeats of a spell for this long
+  const MAX_CARDS = 12;
+
+  const cardsEl = document.getElementById("cards");
+  const emptyEl = document.getElementById("empty");
+  const statusEl = document.getElementById("status");
+  const heardEl = document.getElementById("heard");
+  const listenButton = document.getElementById("listen");
+  const lookupInput = document.getElementById("lookup");
+
+  let edition = "2014";
+  let matcher = null;
+  let shownNames = []; // newest first
+  const lastHeardAt = new Map();
+
+  /* ---------- Rules edition ---------- */
+
+  function setEdition(next) {
+    edition = next;
+    try { localStorage.setItem("edition", next); } catch (e) {}
+    matcher = createMatcher(SPELL_DATA[edition]);
+    document.querySelectorAll("[data-edition]").forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.edition === edition));
+    });
+    document.getElementById("spell-names").innerHTML =
+      SPELL_DATA[edition].map((spell) => `<option value="${escapeHtml(spell.name)}">`).join("");
+    shownNames = shownNames.filter((name) => findSpell(name));
+    renderCards();
+  }
+
+  function findSpell(name) {
+    return SPELL_DATA[edition].find((spell) => spell.name === name);
+  }
+
+  /* ---------- Spell cards ---------- */
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, (c) => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+  }
+
+  function inlineFormat(text) {
+    return escapeHtml(text)
+      .replace(/\*\*\*(.+?)\*\*\*/g, "<strong>$1</strong>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|\s)[*_](\S.*?\S)[*_](?=\s|[.,;:]|$)/g, "$1<em>$2</em>");
+  }
+
+  function tableToHtml(rows) {
+    const cells = rows
+      .filter((row) => !/^\|?[\s:|-]+\|?$/.test(row))
+      .map((row) => row.replace(/^\||\|$/g, "").split("|").map((cell) => cell.trim()));
+    const [head, ...body] = cells;
+    return "<table><thead><tr>" + head.map((c) => `<th>${inlineFormat(c)}</th>`).join("") + "</tr></thead><tbody>"
+      + body.map((row) => "<tr>" + row.map((c) => `<td>${inlineFormat(c)}</td>`).join("") + "</tr>").join("")
+      + "</tbody></table>";
+  }
+
+  function isTableRow(line) {
+    return line.startsWith("|") || line.includes(" | ");
+  }
+
+  function rulesToHtml(lines) {
+    let html = "";
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (isTableRow(line)) {
+        const rows = [];
+        while (i < lines.length && isTableRow(lines[i])) rows.push(lines[i++]);
+        html += tableToHtml(rows);
+      } else if (/^[-*] /.test(line)) {
+        const items = [];
+        while (i < lines.length && /^[-*] /.test(lines[i])) items.push(lines[i++].slice(2));
+        html += "<ul>" + items.map((item) => `<li>${inlineFormat(item)}</li>`).join("") + "</ul>";
+      } else if (line.startsWith("#")) {
+        html += `<h3>${inlineFormat(line.replace(/^#+\s*/, ""))}</h3>`;
+        i++;
+      } else {
+        html += `<p>${inlineFormat(line)}</p>`;
+        i++;
+      }
+    }
+    return html;
+  }
+
+  function levelText(spell) {
+    if (spell.level === 0) return `${spell.school} cantrip`;
+    const suffix = { 1: "st", 2: "nd", 3: "rd" }[spell.level] || "th";
+    return `${spell.level}${suffix}-level ${spell.school.toLowerCase()}`;
+  }
+
+  function cardHtml(spell) {
+    const tags = [];
+    if (spell.concentration) tags.push('<span class="tag warn">Concentration</span>');
+    if (spell.ritual) tags.push('<span class="tag">Ritual</span>');
+    const components = spell.components.join(", ") + (spell.material ? ` (${spell.material})` : "");
+    const higher = spell.higherLevel.length
+      ? `<div class="higher rules"><strong>At higher levels</strong>${rulesToHtml(spell.higherLevel)}</div>`
+      : "";
+    return `
+      <article class="card">
+        <div class="card-top">
+          <div>
+            <h2>${escapeHtml(spell.name)}</h2>
+            <p class="subtitle">${escapeHtml(levelText(spell))}</p>
+          </div>
+          <button class="dismiss" type="button" data-dismiss="${escapeHtml(spell.name)}"
+                  aria-label="Remove ${escapeHtml(spell.name)}">×</button>
+        </div>
+        ${tags.length ? `<div class="tags">${tags.join("")}</div>` : ""}
+        <dl class="facts">
+          <div><dt>Casting time</dt><dd>${escapeHtml(spell.castingTime)}</dd></div>
+          <div><dt>Range</dt><dd>${escapeHtml(spell.range)}</dd></div>
+          <div><dt>Duration</dt><dd>${escapeHtml(spell.duration)}</dd></div>
+          <div><dt>Components</dt><dd>${escapeHtml(components)}</dd></div>
+        </dl>
+        <div class="rules">${rulesToHtml(spell.desc)}</div>
+        ${spell.warning ? `<p class="data-warning">${escapeHtml(spell.warning)}</p>` : ""}
+        ${higher}
+        <p class="classes">${escapeHtml(spell.classes.join(", "))}</p>
+      </article>`;
+  }
+
+  function renderCards() {
+    cardsEl.innerHTML = shownNames.map((name) => cardHtml(findSpell(name))).join("");
+    emptyEl.hidden = shownNames.length > 0;
+  }
+
+  function showSpell(spell) {
+    shownNames = [spell.name, ...shownNames.filter((name) => name !== spell.name)].slice(0, MAX_CARDS);
+    renderCards();
+  }
+
+  /* ---------- What was said ---------- */
+
+  function handleHeard(text) {
+    const now = Date.now();
+    for (const spell of matcher.find(text)) {
+      if (now - (lastHeardAt.get(spell.name) || 0) < SAME_SPELL_COOLDOWN_MS) continue;
+      lastHeardAt.set(spell.name, now);
+      showSpell(spell);
+    }
+  }
+
+  /* ---------- Listening through the microphone ---------- */
+
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+  let listening = false;
+  let wakeLock = null;
+  let engine = "local";
+
+  const localListener = createLocalListener({
+    onText: (text) => {
+      heardEl.textContent = text;
+      handleHeard(text);
+    },
+    onStatus: (text) => setStatus(text),
+    onFatal: (message) => stopListening(message, true),
+  });
+
+  function setEngine(next) {
+    if (listening) stopListening();
+    engine = next;
+    try { localStorage.setItem("engine", next); } catch (e) {}
+    document.querySelectorAll("[data-engine]").forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.engine === engine));
+    });
+    const chromeUnavailable = engine === "chrome" && !SpeechRecognition;
+    listenButton.disabled = chromeUnavailable;
+    setStatus(chromeUnavailable ? "This browser can't listen this way. Open this page in Google Chrome." : "Not listening", chromeUnavailable);
+  }
+
+  function setStatus(text, isProblem = false) {
+    statusEl.textContent = text;
+    statusEl.classList.toggle("problem", isProblem);
+  }
+
+  async function keepScreenOn() {
+    try { wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+  }
+
+  function startListening() {
+    listening = true;
+    listenButton.textContent = "Stop listening";
+    listenButton.classList.add("on");
+    keepScreenOn();
+    if (engine === "local") {
+      localListener.start();
+    } else {
+      setStatus("Listening through Chrome");
+      startRecognition();
+    }
+  }
+
+  function stopListening(message = "Not listening", isProblem = false) {
+    listening = false;
+    listenButton.textContent = "Start listening";
+    listenButton.classList.remove("on");
+    setStatus(message, isProblem);
+    heardEl.textContent = "";
+    if (recognition) recognition.abort();
+    localListener.stop();
+    if (wakeLock) wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+
+  function startRecognition() {
+    recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = true; // gets words before the sentence finishes
+
+    recognition.onresult = (event) => {
+      setStatus("Listening through Chrome");
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const text = event.results[i][0].transcript;
+        heardEl.textContent = text;
+        handleHeard(text);
+      }
+    };
+
+    recognition.onerror = (event) => {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        stopListening("Microphone blocked. Click the icon left of the address bar and allow the microphone.", true);
+      } else if (event.error === "audio-capture") {
+        stopListening("No microphone found. Plug one in and press Start listening.", true);
+      } else if (event.error === "network") {
+        setStatus("Can't reach the speech service. Check your internet; retrying…", true);
+      }
+    };
+
+    // The browser stops listening every so often, so start again straight away.
+    recognition.onend = () => {
+      if (listening) setTimeout(() => { if (listening) startRecognition(); }, 400);
+    };
+
+    try { recognition.start(); } catch (e) {}
+  }
+
+  /* ---------- Buttons ---------- */
+
+  listenButton.addEventListener("click", () => (listening ? stopListening() : startListening()));
+
+  document.querySelectorAll("[data-edition]").forEach((button) => {
+    button.addEventListener("click", () => setEdition(button.dataset.edition));
+  });
+
+  document.querySelectorAll("[data-engine]").forEach((button) => {
+    button.addEventListener("click", () => setEngine(button.dataset.engine));
+  });
+
+  document.getElementById("clear").addEventListener("click", () => {
+    shownNames = [];
+    renderCards();
+  });
+
+  cardsEl.addEventListener("click", (event) => {
+    const name = event.target.dataset && event.target.dataset.dismiss;
+    if (!name) return;
+    shownNames = shownNames.filter((shown) => shown !== name);
+    renderCards();
+  });
+
+  document.getElementById("lookup-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const text = lookupInput.value.trim();
+    if (!text) return;
+    const found = matcher.find(text, { typed: true });
+    [...found].reverse().forEach(showSpell);
+    if (found.length) {
+      lookupInput.value = "";
+      if (!listening) setStatus("Not listening");
+    } else {
+      setStatus(`No spell found for “${text}” in the free ${edition} rules.`, true);
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (listening && document.visibilityState === "visible") keepScreenOn();
+  });
+
+  /* ---------- Start up ---------- */
+
+  let savedEdition = null;
+  try { savedEdition = localStorage.getItem("edition"); } catch (e) {}
+  setEdition(savedEdition === "2024" ? "2024" : "2014");
+
+  let savedEngine = null;
+  try { savedEngine = localStorage.getItem("engine"); } catch (e) {}
+  setEngine(savedEngine === "chrome" ? "chrome" : "local");
+
+  if (location.protocol === "file:") {
+    setStatus("Please open this with start.bat. The local speech model can't load otherwise.", true);
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,3 @@
+# The speech model is about 2 GB, too big for Git. See "Getting the model" in README.md.
+models/
+__pycache__/
